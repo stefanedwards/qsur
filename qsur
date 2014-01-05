@@ -1,0 +1,2 @@
+#!/bin/bash
+nice python src/qsur.py
