@@ -11,6 +11,7 @@ import re
 USER = os.environ['USER']
 
 re_state = re.compile(' ([CHERW]) ')
+qstat_lines = 0
 
 def get_qstat(user=USER):
   #p1 = Popen(['qstat', '-u', user], shell=FALSE, stdout=PIPE)
@@ -20,6 +21,7 @@ def get_qstat(user=USER):
   return output
 
 def print_qstat(stdscr, y=3, x_offset=1):
+  global qstat_lines
   qstat = [l.rstrip() for l in get_qstat().split('\n')]
   stdscr.addstr(y, x_offset, qstat[0])
   y += 1
@@ -28,11 +30,18 @@ def print_qstat(stdscr, y=3, x_offset=1):
   stdscr.addstr(y, x_offset, qstat[2])
   y += 1  
 
+  if qstat_lines > len(qstat):
+    stdscr.clearok(1)
+  qstat_lines = len(qstat)
+
   for l in qstat[3:]:
     # goto state:
     state = re_state.search(l, pos=80, endpos=93)
     if state is None:
-      stdscr.addstr(y, x_offset, l)
+      try:
+        stdscr.addstr(y, x_offset, l)
+      except curses.error:
+        pass
     else:
       start = state.start(1)
       end   = state.span(1)[1]
@@ -47,10 +56,12 @@ def print_qstat(stdscr, y=3, x_offset=1):
       if state == 'W':
         state_att = curses.A_DIM
         line_att = curses.A_DIM
-
-      stdscr.addstr(y, x_offset, l[:start], line_att)
-      stdscr.addstr(l[start], state_att) ## write state
-      stdscr.addstr(l[end:], line_att)  ## remaining line
+      try:
+        stdscr.addstr(y, x_offset, l[:start], line_att)
+        stdscr.addstr(l[start], state_att) ## write state
+        stdscr.addstr(l[end:], line_att)  ## remaining line
+      except curses.error:
+        pass
     y += 1
   stdscr.refresh()
     
@@ -58,11 +69,11 @@ def print_qstat(stdscr, y=3, x_offset=1):
   
 
 def print_time(stdscr, y=2, x=1):
-  stdscr.addstr(y, x, strftime('%Y-%m-%d %H:%m:%S  '))
+  stdscr.addstr(y, x, strftime('%Y-%m-%d %H:%M:%S  '))
   stdscr.refresh()
 
 def print_right_time(stdscr, y=3):
-  time_length = 19
+  time_length = 20
   x = stdscr.getmaxyx()[1] - time_length
   print_time(stdscr, y, x)
 
@@ -78,6 +89,9 @@ def main(stdscr):
   print_qstat(stdscr)
   #stdscr.refresh()
 
+  #qstat_win = curses.newwin(8, 94, 3, 1)
+
+
   stdscr.nodelay(1)  # getch is non-blocking
   start = time()
   wait = time()
@@ -86,7 +100,7 @@ def main(stdscr):
     c = stdscr.getch()
     if c == ord('q') or c == ord('Q'):
       break
-    if time() >= wait + 30:
+    if time() >= wait + 5:
       print_qstat(stdscr)
       wait = time()
     #if time() >= start + 30:
