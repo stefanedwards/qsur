@@ -11,7 +11,6 @@ import re
 USER = os.environ['USER']
 
 re_state = re.compile(' ([CHERW]) ')
-qstat_lines = 0
 
 def get_qstat(user=USER):
   #p1 = Popen(['qstat', '-u', user], shell=FALSE, stdout=PIPE)
@@ -20,29 +19,24 @@ def get_qstat(user=USER):
   output = '\n'.join(output)
   return output
 
-def print_qstat(stdscr, y=3, x_offset=1):
-  global qstat_lines
-  qstat = [l.rstrip() for l in get_qstat().split('\n')]
+def print_qstat_head(stdscr, qstat, y=3, x_offset=1):
   stdscr.addstr(y, x_offset, qstat[0])
   y += 1
   stdscr.addstr(y, x_offset, qstat[1])
   y += 1
   stdscr.addstr(y, x_offset, qstat[2])
   y += 1  
-
-  if qstat_lines > len(qstat):
-    stdscr.clearok(1)
-  qstat_lines = len(qstat)
-
-  for l in qstat[3:]:
+    
+def print_qstat_jobs(stdscr, qstat, y=6, x_offset=1):
+  for l in qstat:
     # goto state:
     state = re_state.search(l, pos=80, endpos=93)
-    if state is None:
-      try:
-        stdscr.addstr(y, x_offset, l)
-      except curses.error:
-        pass
-    else:
+    try:
+      stdscr.addstr(y, x_offset, l)
+    except curses.error:
+      pass
+
+    if state is not None:
       start = state.start(1)
       end   = state.span(1)[1]
       state = state.groups()[0]
@@ -50,23 +44,20 @@ def print_qstat(stdscr, y=3, x_offset=1):
       state_att = curses.A_NORMAL
       line_att = curses.A_NORMAL
  
-      #stdscr.addstr(6,2, state.group())
       if state == 'E' or state == 'C':
         state_att = curses.A_BLINK
       if state == 'W':
         state_att = curses.A_DIM
         line_att = curses.A_DIM
       try:
-        stdscr.addstr(y, x_offset, l[:start], line_att)
-        stdscr.addstr(l[start], state_att) ## write state
-        stdscr.addstr(l[end:], line_att)  ## remaining line
+        if line_att != curses.A_NORMAL:
+          stdscr.addstr(y, x_offset, l, line_att)
+        if state_att != curses.A_NORMAL:
+          stdscr.addstr(y, x_offset+start, state, state_att)
       except curses.error:
         pass
     y += 1
   stdscr.refresh()
-    
- 
-  
 
 def print_time(stdscr, y=2, x=1):
   stdscr.addstr(y, x, strftime('%Y-%m-%d %H:%M:%S  '))
@@ -86,11 +77,16 @@ def main(stdscr):
   stdscr.addstr(1,1, 'qstat for user ')
   stdscr.addstr(USER, curses.A_BOLD) 
   print_right_time(stdscr, y=1)
-  print_qstat(stdscr)
+  qstat = [l.rstrip() for l in get_qstat().split('\n')]
+  print_qstat_head(stdscr, qstat)
+  if len(qstat) > 3:
+    print_qstat_jobs(stdscr, qstat[3:])
+
+  #print_qstat(stdscr)
   #stdscr.refresh()
 
   #qstat_win = curses.newwin(8, 94, 3, 1)
-
+  qstat_lines = 0
 
   stdscr.nodelay(1)  # getch is non-blocking
   start = time()
@@ -100,8 +96,14 @@ def main(stdscr):
     c = stdscr.getch()
     if c == ord('q') or c == ord('Q'):
       break
-    if time() >= wait + 5:
-      print_qstat(stdscr)
+    if time() >= wait + 30:
+      qstat = [l.rstrip() for l in get_qstat().split('\n')]
+      if len(qstat) != qstat_lines:
+        stdscr.clear()
+        print_qstat_head(stdscr, qstat)
+        qstat_lines = len(qstat)
+      if len(qstat) > 3:
+        print_qstat_jobs(stdscr, qstat[3:])
       wait = time()
     #if time() >= start + 30:
     #  break
